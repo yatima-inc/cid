@@ -33,11 +33,14 @@
 
 A CID is a self-describing content-addressed identifier. It uses cryptographic hashes to achieve content addressing. It uses several [multiformats](https://github.com/multiformats/multiformats) to achieve flexible self-description, namely [multihash](https://github.com/multiformats/multihash) for hashes, [multicodec](https://github.com/multiformats/multicodec) for data content types, and [multibase](https://github.com/multiformats/multibase) to encode the CID itself into strings.
 
-Concretely, it's a *typed* content address: a tuple of `(content-type, content-address)`.
+Concretely, a CIDv1 is a *typed* content address: a tuple of `(content-type, content-address)`.
+
+There is also CIDv2, which extends CIDv1 to allow you to add additional
+metadata to a content-address: `(content-type, content-address, metadata-type, metadata-address)`
 
 ## How does it work?
 
-Current version: CIDv1
+Current versions: CIDv1, CIDv2
 
 A CIDv1 has four parts:
 
@@ -55,6 +58,17 @@ Where
 - `<multihash-content-address>` is a [multihash](https://github.com/multiformats/multihash) value, representing the cryptographic hash of the content being addressed. Multihash enables CIDs to use many different cryptographic hash function, for upgradability and protocol agility purposes.
 
 That's it!
+
+A CIDv2 is an extension of CIDv1, which adds an additional multicodec
+content-type and multihash content-address for metadata. 
+
+```sh
+<cidv2> ::=
+<mb><multicodec-cidv2><data-multicodec-content-type><data-multihash-content-address><metadata-multicodec-content-type><metadata-multihash-content-address>
+```
+
+This can be used, for example, to combine a pointer to an IPLD data value, with
+its corresponding [IPLD Schema](https://ipld.io/docs/schemas/intro/).
 
 ## Design Considerations
 
@@ -91,6 +105,13 @@ base58btc - cidv1 - raw - sha2-256-256-6e6ff7950a36187a801613426e858dce686cd7d7e
 
 See: https://cid.ipfs.io/#zb2rhe5P4gXftAwvA4eXQ5HJwsER2owDyS9sKaQRRVQPn93bA
 
+```
+# example CIDv2
+bajkreib2n2yhsdzzvsd4stzyk2zn2lc5cehgqelaejq2tkjd2o5shloiw5kreihkhplt4k2qnyafe4rswpwxipagnwudvdrqm33cu4phl243jkq5wy
+# corresponding human readable CID
+base32lower - cidv2 - raw - sha2-256-256-f3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7 - raw - sha2-256-256-fea3bd73e2b506e00527232b3ed743c066da83a8e3066f62a71e75eb9b4aa1db6
+```
+
 ## Versions
 
 ### CIDv0
@@ -113,6 +134,13 @@ See the section: [How does it work?](#how-does-it-work)
 <cidv1> ::= <multibase-prefix><multicodec-cidv1><multicodec-content-type><multihash-content-address>
 ```
 
+### CIDv2
+
+
+```
+<cidv2> ::= <mb><multicodec-cidv2><data-multicodec-content-type><data-multihash-content-address><metadata-multicodec-content-type><metadata-multihash-content-address>
+```
+
 ## Decoding Algorithm
 
 To decode a CID, follow the following algorithm:
@@ -132,7 +160,18 @@ To decode a CID, follow the following algorithm:
        * The CID's multicodec is the second varint in `cid`
        * The CID's multihash is the rest of the `cid` (after the second varint).
        * The CID's version is 1.
-     * If `N == 0x02` (CIDv2), or `N == 0x03` (CIDv3), the CID version is reserved.
+     * If `N == 0x02` (CIDv2):
+       * The CID's data-multicodec is the second varint in `cid`
+       * The CID's data-multihash-multicodec is the third varint in `cid`
+       * The CID's data-multihash-size is the fourth varint in `cid`
+       * The CID's data-multihash-digest is the next number of bytes indicated
+         by the data-multihash-size
+       * The CID's metadata-multicodec is a varint in `cid` immediately
+         following the `data-multihash-digest`
+       * The CID's metadata-multihash is the rest of the `cid` (after the
+         metadata-multicodec).
+       * The CID's version is 2
+     * If `N == 0x03` (CIDv3), the CID version is reserved.
      * If `N` is equal to some other multicodec, the CID is malformed.
 
 ## Implementations
